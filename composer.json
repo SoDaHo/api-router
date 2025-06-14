@@ -1,0 +1,14 @@
+{
+  "name": "sodaho/api-router",
+  "description": "A lightweight and fast PHP router inspired by the core concepts of nikic/FastRoute.",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "SoDaHo\\ApiRouter\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=8.0"
+  }
+}
