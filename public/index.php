@@ -2,25 +2,25 @@
 
 /**
  * Public entry point for the application.
- *
- * This file handles incoming requests, determines which routes to load,
- * invalidates the cache if necessary, and dispatches the request.
  */
 
-// Bootstrap the application by loading the Composer autoloader.
 require __DIR__ . '/../vendor/autoload.php';
 
 use Sodaho\ApiRouter\Dispatcher;
 use Sodaho\ApiRouter\Router;
 
-$routesDir = __DIR__ . '/../routes';
+// --- Application Configuration ---
 $cacheDir = __DIR__ . '/../cache';
+$basePath = '';
+// --- End Configuration ---
 
+
+$routesDir = __DIR__ . '/../routes';
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
 
-// Decide which route file to use based on the URI prefix.
-// This allows separating web and API routes.
-if (str_starts_with($uri, '/api')) {
+$isApiRequest = str_starts_with($uri, $basePath . '/api');
+
+if ($isApiRequest) {
     $routesFile = $routesDir . '/api.php';
     $cacheFile = $cacheDir . '/api_routes.php';
 } else {
@@ -28,64 +28,80 @@ if (str_starts_with($uri, '/api')) {
     $cacheFile = $cacheDir . '/web_routes.php';
 }
 
-// A simple cache invalidation strategy:
-// If the routes file has been modified more recently than the cache file, delete the cache.
 if (file_exists($routesFile) && file_exists($cacheFile) && filemtime($cacheFile) < filemtime($routesFile)) {
     unlink($cacheFile);
 }
 
 if (!file_exists($routesFile)) {
-    header("HTTP/1.0 500 Internal Server Error");
-    die("Route definition file not found: " . htmlspecialchars($routesFile));
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Internal Server Error', 'message' => 'Route definition file not found.']);
+    exit;
 }
 
-// Create the dispatcher instance using the Router facade.
-$routeDefinitionCallback = require $routesFile;
-$dispatcher = Router::createDispatcher($routeDefinitionCallback, [
-    'cacheFile' => $cacheFile,
-]);
 
-$httpMethod = $_SERVER['REQUEST_METHOD'];
-$routeInfo = $dispatcher->dispatch($httpMethod, $uri);
+try {
+    $routeDefinitionCallback = require $routesFile;
+    $dispatcher = Router::createDispatcher($routeDefinitionCallback, [
+        'cacheFile' => $cacheFile,
+        'basePath' => $basePath,
+    ]);
 
-// Process the result from the dispatcher.
-switch ($routeInfo[0]) {
-    case Dispatcher::NOT_FOUND:
-        http_response_code(404);
-        echo '<h1>404 Not Found</h1>';
-        break;
+    $httpMethod = $_SERVER['REQUEST_METHOD'];
+    $routeInfo = $dispatcher->dispatch($httpMethod, $uri);
 
-    case Dispatcher::METHOD_NOT_ALLOWED:
-        $allowedMethods = $routeInfo[1];
-        http_response_code(405);
-        header("Allow: " . implode(', ', $allowedMethods));
-        echo '<h1>405 Method Not Allowed</h1>';
-        break;
-
-    case Dispatcher::FOUND:
-        [/* status */, $handler, $vars] = $routeInfo;
-
-        // Handle Closure-based routes.
-        if (is_callable($handler)) {
-            call_user_func_array($handler, $vars);
-            break;
-        }
-
-        // Handle [Controller::class, 'method'] routes.
-        if (is_array($handler) && count($handler) === 2 && class_exists($handler[0])) {
-            $controllerClass = $handler[0];
-            $method = $handler[1];
-
-            $controller = new $controllerClass();
-
-            if (method_exists($controller, $method)) {
-                call_user_func_array([$controller, $method], $vars);
-                break;
+    switch ($routeInfo[0]) {
+        case Dispatcher::NOT_FOUND:
+            http_response_code(404);
+            if ($isApiRequest) {
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'Not Found']);
+            } else {
+                echo '<h1>404 Not Found</h1>';
             }
-        }
+            break;
 
-        // Fallback for invalid handler configuration.
-        http_response_code(500);
-        echo '<h1>500 Internal Server Error</h1><p>The route handler is not configured correctly.</p>';
-        break;
+        case Dispatcher::METHOD_NOT_ALLOWED:
+            $allowedMethods = $routeInfo[1];
+            http_response_code(405);
+            header('Allow: ' . implode(', ', $allowedMethods));
+            if ($isApiRequest) {
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'Method Not Allowed', 'allowed' => $allowedMethods]);
+            } else {
+                echo '<h1>405 Method Not Allowed</h1>';
+            }
+            break;
+
+        case Dispatcher::FOUND:
+            [/* status */, $handler, $vars, $middleware] = $routeInfo;
+
+            $dispatcher->runMiddleware($middleware);
+
+            if (is_array($handler) && count($handler) === 2 && class_exists($handler[0])) {
+                $controllerClass = $handler[0];
+                $method = $handler[1];
+                $controller = new $controllerClass();
+
+                if (method_exists($controller, $method)) {
+                    call_user_func_array([$controller, $method], $vars);
+                    break;
+                }
+            }
+
+            http_response_code(500);
+            if ($isApiRequest) {
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'Internal Server Error', 'message' => 'Invalid route handler configuration.']);
+            } else {
+                echo '<h1>500 Internal Server Error</h1><p>The route handler is not configured correctly.</p>';
+            }
+            break;
+    }
+
+} catch (\Exception $e) {
+    http_response_code(500);
+    error_log($e->getMessage());
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Internal Server Error', 'message' => 'An error occurred.']);
 }
