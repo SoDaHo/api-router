@@ -31,16 +31,16 @@ class Dispatcher
         }
 
         if (isset($this->staticRoutes[$httpMethod][$uri])) {
-            $handlerData = $this->staticRoutes[$httpMethod][$uri];
-            return [self::FOUND, $handlerData['handler'], [], $handlerData['middleware']];
+            $routeData = $this->staticRoutes[$httpMethod][$uri];
+            return [self::FOUND, $routeData['handler'], [], $routeData['middleware']];
         }
 
         if (isset($this->variableRoutes[$httpMethod])) {
-            foreach ($this->variableRoutes[$httpMethod] as [$regex, $handlerData, $varNames]) {
+            foreach ($this->variableRoutes[$httpMethod] as [$regex, $routeData, $varNames]) {
                 if (preg_match($regex, $uri, $matches)) {
                     array_shift($matches);
                     $vars = count($varNames) > 0 ? array_combine($varNames, $matches) : [];
-                    return [self::FOUND, $handlerData['handler'], $vars, $handlerData['middleware']];
+                    return [self::FOUND, $routeData['handler'], $vars, $routeData['middleware']];
                 }
             }
         }
@@ -53,14 +53,18 @@ class Dispatcher
         return [self::NOT_FOUND];
     }
 
-    public function runMiddleware(array $middlewareClasses): void
+    public function runMiddleware(array $middlewareList): void
     {
-        foreach ($middlewareClasses as $middlewareClass) {
+        foreach ($middlewareList as $middlewareInfo) {
+            $middlewareClass = $middlewareInfo['class'];
+            $params = $middlewareInfo['params'];
+
             if (!class_exists($middlewareClass)) {
                 throw new \Exception("Middleware class not found: {$middlewareClass}");
             }
 
-            $middleware = new $middlewareClass();
+            $reflection = new \ReflectionClass($middlewareClass);
+            $middleware = $reflection->newInstanceArgs($params);
 
             if (!$middleware instanceof MiddlewareInterface) {
                 throw new \Exception("Middleware class {$middlewareClass} must implement MiddlewareInterface.");

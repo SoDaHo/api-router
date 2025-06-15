@@ -44,15 +44,21 @@ class Router
         $variableRoutes = [];
         $routeParser = new RouteParser();
 
-        foreach ($routes as [$httpMethod, $route, $handler, $middleware]) {
-            $handlerData = ['handler' => $handler, 'middleware' => $middleware];
+        foreach ($routes as $routeData) {
+            $route = $routeData['route'];
+            $httpMethod = $routeData['httpMethod'];
+
+            $dataToStore = [
+                'handler' => $routeData['handler'],
+                'middleware' => $routeData['middleware']
+            ];
 
             if (!str_contains($route, '{')) {
-                $staticRoutes[$httpMethod][$route] = $handlerData;
+                $staticRoutes[$httpMethod][$route] = $dataToStore;
             } else {
                 [$regex, $variableNames] = $routeParser->parse($route);
                 $fullRegex = '~^' . $regex . '$~';
-                $variableRoutes[$httpMethod][] = [$fullRegex, $handlerData, $variableNames];
+                $variableRoutes[$httpMethod][] = [$fullRegex, $dataToStore, $variableNames];
             }
         }
 
