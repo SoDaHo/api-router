@@ -8,7 +8,15 @@
       "Sodaho\\ApiRouter\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Sodaho\\ApiRouter\\Tests\\": "tests/"
+    }
+  },
   "require": {
     "php": ">=8.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^12.2"
   }
 }
