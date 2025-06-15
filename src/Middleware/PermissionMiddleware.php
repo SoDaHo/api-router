@@ -2,38 +2,29 @@
 
 namespace Sodaho\ApiRouter\Middleware;
 
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\RequestHandlerInterface;
+use Sodaho\ApiRouter\Http\JsonResponse;
+
 class PermissionMiddleware implements MiddlewareInterface
 {
-    /** @var string The required permission */
     protected string $permission;
 
-    /**
-     * @param string $permission The permission required to pass this middleware.
-     */
     public function __construct(string $permission)
     {
         $this->permission = $permission;
     }
 
-    /**
-     * Handles the permission check.
-     */
-    public function handle(): void
+    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        // This is a simulation. In a real app, you would:
-        // 1. Get the authenticated user (presumably by a previous AuthMiddleware).
-        // 2. Check if that user has the required permission.
-        // e.g., if (!Auth::user()->hasPermission($this->permission)) { ... }
-
-        // For this example, we simulate checking a specific header.
-        $userPermissionHeader = $_SERVER['HTTP_X_USER_PERMISSIONS'] ?? '';
+        $userPermissionHeader = $request->getHeaderLine('X-User-Permissions');
         $userPermissions = explode(',', $userPermissionHeader);
 
         if (!in_array($this->permission, $userPermissions, true)) {
-            http_response_code(403); // Forbidden
-            header('Content-Type: application/json');
-            echo json_encode(['error' => "Forbidden: Missing required permission '{$this->permission}'"]);
-            exit;
+            return new JsonResponse(['error' => "Forbidden: Missing required permission '{$this->permission}'"], 403);
         }
+
+        return $handler->handle($request);
     }
 }

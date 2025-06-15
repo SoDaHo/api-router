@@ -2,44 +2,27 @@
 
 namespace Sodaho\ApiRouter\Controllers;
 
-/**
- * Class ApiController
- *
- * Example controller for handling API routes.
- * NOTE: This file is for demonstration purposes and would typically
- * reside in the user's application, not in the router library itself.
- */
+use Psr\Http\Message\ResponseInterface;
+use Sodaho\ApiRouter\Http\JsonResponse;
+
 class ApiController
 {
-    public function status(): void
+    public function status(): ResponseInterface
     {
-        $this->jsonResponse(['status' => 'ok', 'timestamp' => time()]);
+        return new JsonResponse(['status' => 'ok', 'timestamp' => time()]);
     }
 
-    public function getProducts(): void
+    public function getProducts(): ResponseInterface
     {
         $products = [
             ['id' => 1, 'name' => 'Laptop'],
-            ['id' => 2, 'name' => 'Maus'],
+            ['id' => 2, 'name' => 'Mouse'],
         ];
-        $this->jsonResponse($products);
+        return new JsonResponse($products);
     }
 
-    public function getProductById(string $id): void
+    public function getProductById(string $id): ResponseInterface
     {
-        // In a real application, you would fetch this from a database.
-        $this->jsonResponse(['id' => (int)$id, 'name' => 'Sample Product']);
-    }
-
-    /**
-     * A helper method to send a JSON response.
-     * @param mixed $data The data to encode as JSON.
-     * @param int $statusCode The HTTP status code.
-     */
-    private function jsonResponse(mixed $data, int $statusCode = 200): void
-    {
-        http_response_code($statusCode);
-        header('Content-Type: application/json');
-        echo json_encode($data);
+        return new JsonResponse(['id' => (int)$id, 'name' => 'Sample Product']);
     }
 }

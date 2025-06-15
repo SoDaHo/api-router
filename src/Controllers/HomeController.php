@@ -2,27 +2,32 @@
 
 namespace Sodaho\ApiRouter\Controllers;
 
-/**
- * Class HomeController
- *
- * Example controller for handling web-facing routes.
- * NOTE: This file is for demonstration purposes and would typically
- * reside in the user's application, not in the router library itself.
- */
+use Nyholm\Psr7\Response;
+use Psr\Http\Message\ResponseInterface;
+
 class HomeController
 {
-    public function index(): void
+    public function index(): ResponseInterface
     {
-        echo '<h1>Home Page</h1><p>Loaded from HomeController!</p>';
+        $html = '<h1>Home Page</h1><p>Loaded from HomeController!</p>';
+        $response = new Response();
+        $response->getBody()->write($html);
+        return $response;
     }
 
-    public function showUser(string $name): void
+    public function showUser(string $name): ResponseInterface
     {
-        echo "<h1>Hello, " . htmlspecialchars($name) . "!</h1><p>Loaded from HomeController.</p>";
+        $html = "<h1>Hello, " . htmlspecialchars($name) . "!</h1><p>Loaded from HomeController.</p>";
+        $response = new Response();
+        $response->getBody()->write($html);
+        return $response;
     }
 
-    public function showUserById(string $id): void
+    public function showUserById(string $id): ResponseInterface
     {
-        echo "<h1>User Profile</h1><p>User ID: {$id}</p><p>Loaded from HomeController.</p>";
+        $html = "<h1>User Profile</h1><p>User ID: {$id}</p><p>Loaded from HomeController.</p>";
+        $response = new Response();
+        $response->getBody()->write($html);
+        return $response;
     }
 }

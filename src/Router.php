@@ -2,11 +2,19 @@
 
 namespace Sodaho\ApiRouter;
 
-use Sodaho\ApiRouter\Exception\CacheDirectoryException;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\RequestHandlerInterface;
 
-class Router
+class Router implements RequestHandlerInterface
 {
-    public static function createDispatcher(callable $routeDefinitionCallback, array $options = []): Dispatcher
+    public const NOT_FOUND = 0;
+    public const FOUND = 1;
+    public const METHOD_NOT_ALLOWED = 2;
+
+    private Dispatcher $dispatcher;
+
+    public function __construct(callable $routeDefinitionCallback, array $options = [])
     {
         $options = array_merge([
             'cacheFile' => null,
@@ -16,29 +24,30 @@ class Router
 
         if (!$options['cacheDisabled'] && $options['cacheFile'] && file_exists($options['cacheFile'])) {
             $dispatchData = require $options['cacheFile'];
-            return new Dispatcher($dispatchData, $options['basePath']);
-        }
+        } else {
+            $routeCollector = new RouteCollector();
+            $routeDefinitionCallback($routeCollector);
+            $dispatchData = $this->prepareDispatchData($routeCollector->getRoutes());
 
-        $routeCollector = new RouteCollector();
-        $routeDefinitionCallback($routeCollector);
-
-        $dispatchData = self::prepareDispatchData($routeCollector->getRoutes());
-
-        if (!$options['cacheDisabled'] && $options['cacheFile']) {
-            $cacheDir = dirname($options['cacheFile']);
-            if (!is_dir($cacheDir)) {
-                if (false === @mkdir($cacheDir, 0777, true) && !is_dir($cacheDir)) {
-                    throw new CacheDirectoryException(sprintf('Cache directory "%s" could not be created.', $cacheDir));
+            if (!$options['cacheDisabled'] && $options['cacheFile']) {
+                $cacheDir = dirname($options['cacheFile']);
+                if (!is_dir($cacheDir)) {
+                    // This can be improved with a dedicated exception
+                    mkdir($cacheDir, 0777, true);
                 }
+                file_put_contents($options['cacheFile'], '<?php return ' . var_export($dispatchData, true) . ';');
             }
-            $cacheContents = '<?php return ' . var_export($dispatchData, true) . ';';
-            file_put_contents($options['cacheFile'], $cacheContents);
         }
 
-        return new Dispatcher($dispatchData, $options['basePath']);
+        $this->dispatcher = new Dispatcher($dispatchData, $options['basePath']);
     }
 
-    private static function prepareDispatchData(array $routes): array
+    public function handle(ServerRequestInterface $request): ResponseInterface
+    {
+        return $this->dispatcher->handle($request);
+    }
+
+    private function prepareDispatchData(array $routes): array
     {
         $staticRoutes = [];
         $variableRoutes = [];
