@@ -1,2 +1,4 @@
 .idea
 vendor
+/tools.sh
+/AllProjectFiles.txt

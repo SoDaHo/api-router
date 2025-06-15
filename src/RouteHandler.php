@@ -15,9 +15,13 @@ class RouteHandler implements RequestHandlerInterface
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
         [$class, $method] = $this->handler;
-        $vars = array_values($request->getAttributes());
+
+        // Route-Parameter aus den Request-Attributen holen
+        $routeAttributes = $request->getAttributes();
 
         $controller = new $class();
-        return $controller->{$method}(...$vars);
+
+        // WICHTIG: Das Request-Objekt und die Route-Parameter werden übergeben
+        return $controller->{$method}($request, ...array_values($routeAttributes));
     }
 }

@@ -3,16 +3,17 @@
 namespace Sodaho\ApiRouter\Controllers;
 
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 use Sodaho\ApiRouter\Http\JsonResponse;
 
 class ApiController
 {
-    public function status(): ResponseInterface
+    public function status(ServerRequestInterface $request): ResponseInterface
     {
         return new JsonResponse(['status' => 'ok', 'timestamp' => time()]);
     }
 
-    public function getProducts(): ResponseInterface
+    public function getProducts(ServerRequestInterface $request): ResponseInterface
     {
         $products = [
             ['id' => 1, 'name' => 'Laptop'],
@@ -21,7 +22,7 @@ class ApiController
         return new JsonResponse($products);
     }
 
-    public function getProductById(string $id): ResponseInterface
+    public function getProductById(ServerRequestInterface $request, string $id): ResponseInterface
     {
         return new JsonResponse(['id' => (int)$id, 'name' => 'Sample Product']);
     }
