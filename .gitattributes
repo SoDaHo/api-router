@@ -1,0 +1,30 @@
+#
+# gitattributes for sodaho/api-router
+#
+# This file defines which files and directories should be excluded
+# from release archives (e.g., created by GitHub or Packagist).
+# This keeps the distributable package clean and small.
+#
+
+# Exclude test files and directories.
+/tests               export-ignore
+/phpunit.xml         export-ignore
+
+# Exclude GitHub-specific files (e.g., workflows for CI).
+/.github             export-ignore
+
+# Exclude example implementation files that are not part of the library itself.
+/public              export-ignore
+/routes              export-ignore
+/cache               export-ignore
+/src/Controllers     export-ignore
+/src/Middleware/ExampleAuthMiddleware.php export-ignore
+/src/Middleware/PermissionMiddleware.php  export-ignore
+/src/Http/JsonResponse.php export-ignore
+
+# Exclude Composer lock file, as libraries should not lock dependencies.
+/composer.lock       export-ignore
+
+# Exclude Git-specific configuration.
+/.gitignore          export-ignore
+/.gitattributes      export-ignore
