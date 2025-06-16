@@ -2,19 +2,26 @@
 
 namespace Sodaho\ApiRouter;
 
+use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Sodaho\ApiRouter\Exception\CacheDirectoryException;
+use Sodaho\ApiRouter\Exception\RouteNotFoundException;
 
 class Router implements RequestHandlerInterface
 {
-    public const NOT_FOUND = 0;
-    public const FOUND = 1;
-    public const METHOD_NOT_ALLOWED = 2;
-
     private Dispatcher $dispatcher;
+    /** @var array<string, string> Map of route names to their patterns. */
+    private array $namedRoutes = [];
 
-    public function __construct(callable $routeDefinitionCallback, array $options = [])
+    /**
+     * @param callable $routeDefinitionCallback
+     * @param array $options
+     * @param ContainerInterface|null $container
+     * @throws CacheDirectoryException
+     */
+    public function __construct(callable $routeDefinitionCallback, array $options = [], ?ContainerInterface $container = null)
     {
         $options = array_merge([
             'cacheFile' => null,
@@ -22,24 +29,27 @@ class Router implements RequestHandlerInterface
             'basePath' => '',
         ], $options);
 
+        // Dispatch data structure: [dispatchable_routes, named_routes_map]
         if (!$options['cacheDisabled'] && $options['cacheFile'] && file_exists($options['cacheFile'])) {
-            $dispatchData = require $options['cacheFile'];
+            $cachedData = require $options['cacheFile'];
+            $dispatchData = $cachedData[0];
+            $this->namedRoutes = $cachedData[1];
         } else {
             $routeCollector = new RouteCollector();
             $routeDefinitionCallback($routeCollector);
-            $dispatchData = $this->prepareDispatchData($routeCollector->getRoutes());
+            [$dispatchData, $this->namedRoutes] = $this->prepareRouteData($routeCollector->getRoutes());
 
             if (!$options['cacheDisabled'] && $options['cacheFile']) {
                 $cacheDir = dirname($options['cacheFile']);
-                if (!is_dir($cacheDir)) {
-                    // This can be improved with a dedicated exception
-                    mkdir($cacheDir, 0777, true);
+                if (!is_dir($cacheDir) && !mkdir($cacheDir, 0777, true) && !is_dir($cacheDir)) {
+                    throw new CacheDirectoryException(sprintf('Directory "%s" was not created', $cacheDir));
                 }
-                file_put_contents($options['cacheFile'], '<?php return ' . var_export($dispatchData, true) . ';');
+                $dataToCache = [$dispatchData, $this->namedRoutes];
+                file_put_contents($options['cacheFile'], '<?php return ' . var_export($dataToCache, true) . ';');
             }
         }
 
-        $this->dispatcher = new Dispatcher($dispatchData, $options['basePath']);
+        $this->dispatcher = new Dispatcher($dispatchData, $options['basePath'], $container);
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -47,13 +57,46 @@ class Router implements RequestHandlerInterface
         return $this->dispatcher->handle($request);
     }
 
-    private function prepareDispatchData(array $routes): array
+    /**
+     * Generate a URL for a named route.
+     *
+     * @param string $name The name of the route.
+     * @param array<string, mixed> $params The parameters for the route.
+     * @return string The generated URL.
+     * @throws RouteNotFoundException
+     */
+    public function generate(string $name, array $params = []): string
+    {
+        if (!isset($this->namedRoutes[$name])) {
+            throw new RouteNotFoundException("No route with the name '{$name}' has been defined.");
+        }
+
+        $routePattern = $this->namedRoutes[$name];
+
+        // Replace placeholders with provided parameters
+        $url = preg_replace_callback('/\{([a-zA-Z_][a-zA-Z0-9_-]*)(:[^}]+)?\}/', function ($matches) use ($params, $name) {
+            $paramName = $matches[1];
+            if (!isset($params[$paramName])) {
+                throw new \InvalidArgumentException("Missing required parameter '{$paramName}' for route '{$name}'.");
+            }
+            return $params[$paramName];
+        }, $routePattern);
+
+        return $url;
+    }
+
+    private function prepareRouteData(array $routes): array
     {
         $staticRoutes = [];
         $variableRoutes = [];
+        $namedRoutes = [];
         $routeParser = new RouteParser();
 
         foreach ($routes as $routeData) {
+            if (isset($routeData['name'])) {
+                $namedRoutes[$routeData['name']] = $routeData['route'];
+            }
+
             $route = $routeData['route'];
             $httpMethod = $routeData['httpMethod'];
 
@@ -71,6 +114,6 @@ class Router implements RequestHandlerInterface
             }
         }
 
-        return [$staticRoutes, $variableRoutes];
+        return [[$staticRoutes, $variableRoutes], $namedRoutes];
     }
 }

@@ -4,7 +4,7 @@ namespace Sodaho\ApiRouter;
 
 class RouteCollector
 {
-    /** @var array<array{httpMethod: string, route: string, handler: mixed, middleware: list<array{class: string, params: list<mixed>}>}> */
+    /** @var array<array{httpMethod: string, route: string, handler: mixed, middleware: list<array{class: string, params: list<mixed>}>, name?: string}> */
     private array $routes = [];
     /** @var list<list<array{class: string, params: list<mixed>}>> */
     private array $middlewareGroupStack = [];
@@ -40,6 +40,24 @@ class RouteCollector
         return $this;
     }
 
+    /**
+     * Assign a name to the last defined route.
+     *
+     * @param string $name The name of the route.
+     * @return $this
+     */
+    public function name(string $name): self
+    {
+        if (empty($this->routes)) {
+            throw new \LogicException('Cannot apply a name to a route before it is defined.');
+        }
+
+        $this->routes[array_key_last($this->routes)]['name'] = $name;
+
+        return $this;
+    }
+
+
     public function group(string $prefix, callable $callback): void
     {
         $this->prefixGroupStack[] = $prefix;
@@ -54,10 +72,8 @@ class RouteCollector
         $middlewareList = [];
         foreach ($middlewares as $mw) {
             if (is_array($mw)) {
-                // This handles the new syntax: [PermissionMiddleware::class, 'users.manage']
                 $middlewareList[] = ['class' => $mw[0], 'params' => array_slice($mw, 1)];
             } else {
-                // This handles the old syntax for single middleware without params
                 $middlewareList[] = ['class' => $mw, 'params' => []];
             }
         }

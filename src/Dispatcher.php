@@ -2,6 +2,7 @@
 
 namespace Sodaho\ApiRouter;
 
+use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
@@ -9,16 +10,22 @@ use Sodaho\ApiRouter\Http\JsonResponse;
 
 class Dispatcher implements RequestHandlerInterface
 {
+    // Define the dispatch status constants, as they are specific to the dispatcher's logic.
+    public const NOT_FOUND = 0;
+    public const FOUND = 1;
+    public const METHOD_NOT_ALLOWED = 2;
+
     private array $staticRoutes;
     private array $variableRoutes;
     private string $basePath;
+    private ?ContainerInterface $container;
 
-    public function __construct(array $dispatchData, string $basePath = '')
+    public function __construct(array $dispatchData, string $basePath = '', ?ContainerInterface $container = null)
     {
-        // FIX: Ensure that the keys exist and default to an empty array.
         $this->staticRoutes = $dispatchData[0] ?? [];
         $this->variableRoutes = $dispatchData[1] ?? [];
         $this->basePath = $basePath;
+        $this->container = $container;
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -26,18 +33,18 @@ class Dispatcher implements RequestHandlerInterface
         $routeInfo = $this->dispatch($request);
 
         switch ($routeInfo[0]) {
-            case Router::NOT_FOUND:
+            case self::NOT_FOUND:
                 return new JsonResponse(['error' => 'Not Found'], 404);
 
-            case Router::METHOD_NOT_ALLOWED:
+            case self::METHOD_NOT_ALLOWED:
                 return new JsonResponse(['error' => 'Method Not Allowed'], 405, ['Allow' => implode(', ', $routeInfo[1])]);
 
-            case Router::FOUND:
+            case self::FOUND:
                 [, $handler, $vars, $middleware] = $routeInfo;
 
                 $request = $this->addVarsToRequest($request, $vars);
 
-                $requestHandler = new RouteHandler($handler);
+                $requestHandler = new RouteHandler($handler, $this->container);
 
                 foreach (array_reverse($middleware) as $middlewareInfo) {
                     $mwInstance = $this->createMiddleware($middlewareInfo);
@@ -47,6 +54,7 @@ class Dispatcher implements RequestHandlerInterface
                 return $requestHandler->handle($request);
         }
 
+        // This should theoretically be unreachable
         return new JsonResponse(['error' => 'An unexpected error occurred'], 500);
     }
 
@@ -61,7 +69,7 @@ class Dispatcher implements RequestHandlerInterface
 
         if (isset($this->staticRoutes[$httpMethod][$uri])) {
             $routeData = $this->staticRoutes[$httpMethod][$uri];
-            return [Router::FOUND, $routeData['handler'], [], $routeData['middleware']];
+            return [self::FOUND, $routeData['handler'], [], $routeData['middleware']];
         }
 
         if (isset($this->variableRoutes[$httpMethod])) {
@@ -69,7 +77,7 @@ class Dispatcher implements RequestHandlerInterface
                 if (preg_match($regex, $uri, $matches)) {
                     array_shift($matches);
                     $vars = count($varNames) > 0 ? array_combine($varNames, $matches) : [];
-                    return [Router::FOUND, $routeData['handler'], $vars, $routeData['middleware']];
+                    return [self::FOUND, $routeData['handler'], $vars, $routeData['middleware']];
                 }
             }
         }
@@ -77,10 +85,10 @@ class Dispatcher implements RequestHandlerInterface
         $allowedMethods = $this->findAllowedMethodsForUri($uri);
 
         if (!empty($allowedMethods)) {
-            return [Router::METHOD_NOT_ALLOWED, $allowedMethods];
+            return [self::METHOD_NOT_ALLOWED, $allowedMethods];
         }
 
-        return [Router::NOT_FOUND];
+        return [self::NOT_FOUND];
     }
 
     private function findAllowedMethodsForUri(string $uri): array
@@ -94,7 +102,7 @@ class Dispatcher implements RequestHandlerInterface
                 continue;
             }
             if (isset($this->variableRoutes[$method])) {
-                foreach ($this->variableRoutes[$method] as [$regex, $routeData, $varNames]) {
+                foreach ($this->variableRoutes[$method] as [$regex, /*$routeData*/, /*$varNames*/]) {
                     if (preg_match($regex, $uri)) {
                         $allowedMethods[] = $method;
                         break;
@@ -117,6 +125,10 @@ class Dispatcher implements RequestHandlerInterface
     {
         $middlewareClass = $middlewareInfo['class'];
         $params = $middlewareInfo['params'];
+
+        if ($this->container && $this->container->has($middlewareClass)) {
+            return $this->container->get($middlewareClass);
+        }
 
         $reflection = new \ReflectionClass($middlewareClass);
         return $reflection->newInstanceArgs($params);
