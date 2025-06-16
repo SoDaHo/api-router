@@ -2,3 +2,5 @@
 vendor
 /tools.sh
 /AllProjectFiles.txt
+/cache/
+/composer.lock
